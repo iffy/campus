@@ -6,6 +6,7 @@ from twisted.conch.insults.text import flatten, attributes as A
 from twisted.conch.insults.helper import CharacterAttribute
 from twisted.python import text as tptext
 from twisted.internet.protocol import ProcessProtocol
+import random
 
 
 
@@ -21,6 +22,22 @@ def bootStrap(protocol):
             protocol)
     return f
 
+
+def timestables():
+    r = random.Random()
+    a = r.randint(99,9999)
+    b = r.randint(99,9999)
+    p = '''\
+%19d
+%19d  *
+--------
+''' % (a, b)
+    s = a*b
+    return p, s
+
+
+def goodjob(a):
+    return 'swell'
 
 
 class CampProtocol(insults.TerminalProtocol):
@@ -497,13 +514,14 @@ class ResolveDispute(Thing):
         d.addCallback(c.setText)
         v.addChild(c)
         v.addChild(field)
+        v.changeFocus()
         return v
 
     def getInput(self, msg):
         if str(msg).strip() == str(self.answer).strip():
             self.solution(self)
             self.c.setText(self.c.text + '   ........... CORRECT')
-            task.deferLater(reactor, 3.0, self.viewer.lookAt, self)
+            task.deferLater(reactor, 1.0, self.viewer.lookAt, self.viewer.location)
 
 
 
@@ -553,41 +571,28 @@ hr = Room('Human Resource')
 furnace = Room('Furnace Room')
 maze = Room('Maze')
 tt = Room('Times Tables')
+
 firepit = Thing()
 firepit.name = 'fire pit'
 firepit.description = 'This is a raging fire pit.  Don\'t touch it.'
 
-import random
-
-def timestables():
-    r = random.Random()
-    a = r.randint(99,9999)
-    b = r.randint(99,9999)
-    p = '''\
-%19d
-%19d  *
---------
-''' % (a, b)
-    s = a*b
-    return p, s
-
-
-def goodjob(a):
-    return 'swell'
+r = ResolveDispute(timestables, goodjob)
+r.name = 'Turning back times tables'
 
 lobby.addThing(Exit(hr))
+lobby.addThing(Exit(tt))
 
-r = ResolveDispute(timestables, goodjob)
-r.name = 'No turning back times tables'
-tt.addThing(r)
-tt.addThing(Exit(lobby))
-lobby.addThing(tt)
 hr.addThing(Exit(lobby))
 hr.addThing(Exit(furnace))
+
 furnace.addThing(Exit(lobby))
 furnace.addThing(firepit)
 furnace.addThing(Exit(maze))
+
 maze.addThing(Exit(maze))
+
+tt.addThing(r)
+tt.addThing(Exit(lobby))
 
 
 
