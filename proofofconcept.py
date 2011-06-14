@@ -36,8 +36,11 @@ def timestables():
     return p, s
 
 
-def goodjob(a):
-    return 'swell'
+def nameThatAnimal():
+    animals = ['duck', 'cat', 'dog', 'cow', 'chicken', 'gorilla',
+        'asdf', 'eggplant', 'kitchen']
+    animal = random.choice(animals)
+    return "It looks like a %s.  What is it?" % animal, animal
 
 
 class CampProtocol(insults.TerminalProtocol):
@@ -349,7 +352,7 @@ class Form(window.VBox):
     I am a form you can fill out
     """
 
-    def __init__(self, fieldnames, values=None):
+    def __init__(self, fieldnames, values=None, otherinfo=None):
         window.VBox.__init__(self)
 
         self.done = defer.Deferred()
@@ -370,6 +373,11 @@ class Form(window.VBox):
             field.label = name
             self.addChild(label)
             self.addChild(field)
+        
+        if otherinfo:
+            o = ClearingTextOutputArea()
+            o.setText(otherinfo)
+            self.addChild(window.Border(o))
 
         self.addChild(window.Border(window.Button('OK', self.okFunc)))
 
@@ -487,41 +495,68 @@ class Exit(Thing):
         return self.destination.getName()
 
 
-class ResolveDispute(Thing):
-    solution = lambda *a:defer.succeed(None)
+class DisputationArena(Thing):
+
     getproblem = lambda *a:defer.succeed(('''1+1 = ?''', 2))
+    question = None
+    answer = None
+    accepting_answers = False
     name = 'Resolve Dispute'
 
-    def __init__(self, getproblem=None, solution=None):
+    def __init__(self, getproblem=None):
+        Thing.__init__(self)
         if getproblem is not None:
             self.getproblem = getproblem
-        if solution is not None:
-            self.solution = solution
-
+        self.getNewProblem()
 
     def getView(self, viewer):
-        self.viewer = viewer
-        log.msg('viewer for ResolveDispute %r' % viewer)
         v = window.VBox()
-        c = self.c = ClearingTextOutputArea()
-        field = window.TextInput(30, self.getInput)
-        d = defer.maybeDeferred(self.getproblem)
-        def cb(a):
-            self.answer = a[1]
-            self.question = a[0]
-            return self.question
-        d.addCallback(cb)
-        d.addCallback(c.setText)
+        c = ClearingTextOutputArea()
+        field = window.TextInput(30, self.makeListener(v, viewer))
         v.addChild(c)
         v.addChild(field)
+        
+        if self.question:
+            c.setText(self.question)
+        
         v.changeFocus()
+        v.discard = self.getDiscard(v)
+        self.views.append(v)
         return v
 
-    def getInput(self, msg):
-        if str(msg).strip() == str(self.answer).strip():
-            self.solution(self)
-            self.c.setText(self.c.text + '   ........... CORRECT')
-            task.deferLater(reactor, 1.0, self.viewer.lookAt, self.viewer.location)
+    def makeListener(self, view, viewer):
+        def f(msg):
+            self.gotAnswer(view, viewer, msg)
+        return f
+
+    def getNewProblem(self):
+        d = defer.maybeDeferred(self.getproblem)
+        d.addCallback(self.gotProblem)
+
+
+    def gotProblem(self, problem):
+        self.question = problem[0]
+        self.answer = problem[1]
+        for view in self.views:
+            view.children[0].setText(self.question)
+            view.children[1].setText('')
+        self.accepting_answers = True
+
+    def gotAnswer(self, view, user, answer):
+        if str(answer).strip() == 'q':
+            user.lookAt(user.location)
+        elif str(answer).strip() == str(self.answer).strip():
+            if not self.accepting_answers:
+                return
+            self.accepting_answers = False
+            points = len(self.views) - 1
+            for v in self.views:
+                if v is view:
+                    v.children[0].setText(self.question + '\nCORRECT: %s points' % points)
+                    user.points += points
+                else:
+                    v.children[0].setText(self.question + '\nToo slow! %s got it first' % user.getName())
+            reactor.callLater(2, self.getNewProblem)
 
 
 
@@ -530,6 +565,7 @@ class ResolveDispute(Thing):
 class User(Thing):
 
     protocol = None
+    points = 0
 
     def moveTo(self, location):
         Thing.moveTo(self, location)
@@ -548,6 +584,10 @@ class User(Thing):
             self.moveTo(thing.destination)
         else:
             self.lookAt(thing)
+    
+    
+    def getDescription(self):
+        return Thing.getDescription(self) + '\n%d points' % self.points
 
 
     def getView(self, user):
@@ -556,7 +596,8 @@ class User(Thing):
 
         f = Form(['name', 'description'],
             {'name': self.name,
-            'description': self.description})
+            'description': self.description},
+            'Points: %s' % self.points)
         def cb(values):
             self.setName(values['name'])
             self.description = values['description']
@@ -570,14 +611,17 @@ lobby = Room('The Lobby')
 hr = Room('Human Resource')
 furnace = Room('Furnace Room')
 maze = Room('Maze')
-tt = Room('Times Tables')
+tt = Room('Arenas')
 
 firepit = Thing()
 firepit.name = 'fire pit'
 firepit.description = 'This is a raging fire pit.  Don\'t touch it.'
 
-r = ResolveDispute(timestables, goodjob)
-r.name = 'Turning back times tables'
+r = DisputationArena(timestables)
+r.name = 'Turning back times tables arena'
+
+r2 = DisputationArena(nameThatAnimal)
+r2.name = 'Name that Animal arena'
 
 lobby.addThing(Exit(hr))
 lobby.addThing(Exit(tt))
@@ -591,8 +635,9 @@ furnace.addThing(Exit(maze))
 
 maze.addThing(Exit(maze))
 
-tt.addThing(r)
 tt.addThing(Exit(lobby))
+tt.addThing(r)
+tt.addThing(r2)
 
 
 
