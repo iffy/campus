@@ -495,6 +495,38 @@ class Exit(Thing):
         return self.destination.getName()
 
 
+class Chat(Thing):
+    sharedoutput = []
+    
+    def getView(self, viewer):
+        vbox = window.VBox()
+        c = ClearingTextOutputArea()
+        for v in self.sharedoutput:
+            v.setText(v.text + viewer.getName() + ' joined\r\n')
+        self.sharedoutput.append(c)
+        sa = window.ScrolledArea(c)
+        inputline = window.TextInput(30, self.makeListener(vbox,
+                                                         viewer))
+        vbox.addChild(sa)
+        vbox.addChild(inputline)
+        # Why doesn't this work? c.setText(flatten(A.fg.red['googoogo'], CharacterAttribute()))
+        return vbox
+        
+    def makeListener(self, vbox, viewer):
+        def f(msg):
+            if str(msg).strip() == 'q':
+                viewer.lookAt(viewer.location)
+                for view in self.sharedoutput:
+                    view.setText(view.text + viewer.getName() + ' has left\r\n')
+            else:
+                log.msg(msg)
+                inputline = vbox.children[1]
+                inputline.setText('')
+                for view in self.sharedoutput:
+                    view.setText(view.text + '<' + viewer.getName() + '> ' + msg +  '\r\n')
+        return f
+
+
 class DisputationArena(Thing):
 
     getproblem = lambda *a:defer.succeed(('''1+1 = ?''', 2))
@@ -612,6 +644,7 @@ hr = Room('Human Resource')
 furnace = Room('Furnace Room')
 maze = Room('Maze')
 tt = Room('Arenas')
+irc = Room('Talk to a representative')
 
 firepit = Thing()
 firepit.name = 'fire pit'
@@ -623,8 +656,11 @@ r.name = 'Turning back times tables arena'
 r2 = DisputationArena(nameThatAnimal)
 r2.name = 'Name that Animal arena'
 
+chatty = Chat()
+
 lobby.addThing(Exit(hr))
 lobby.addThing(Exit(tt))
+lobby.addThing(Exit(irc))
 
 hr.addThing(Exit(lobby))
 hr.addThing(Exit(furnace))
@@ -638,6 +674,9 @@ maze.addThing(Exit(maze))
 tt.addThing(Exit(lobby))
 tt.addThing(r)
 tt.addThing(r2)
+
+irc.addThing(Exit(lobby))
+irc.addThing(chatty)
 
 
 
