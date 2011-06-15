@@ -331,6 +331,37 @@ class ClearingTextOutputArea(window.TextOutputArea):
             terminal.write(' ' * width)
 
 
+class LastLinesViewer(window.TextOutputArea):
+
+    def __init__(self):
+        window.TextOutputArea.__init__(self)
+        self.lines = []
+
+    def setLines(self, lines):
+        self.lines = lines
+
+
+    def render(self, width, height, terminal):
+        n = 0
+        inputLines = self.lines[-height:]
+        outputLines = []
+        while inputLines:
+            if self.longLines == self.WRAP:
+                wrappedLines = tptext.greedyWrap(inputLines.pop(0), width)
+                outputLines.extend(wrappedLines or [''])
+            else:
+                outputLines.append(inputLines.pop(0)[:width])
+            if len(outputLines) >= height:
+                break
+        for n, L in enumerate(outputLines[:height]):
+            terminal.cursorPosition(0, n)
+            terminal.write(L + (' ' * (width - len(L))))
+        for n in xrange(len(outputLines), height):
+            terminal.cursorPosition(0, n)
+            terminal.write(' ' * width)
+
+
+
 class Dialog(window.VBox):
 
     def __init__(self, text, okFunc):
@@ -495,6 +526,50 @@ class Exit(Thing):
         return self.destination.getName()
 
 
+
+class Chat(Thing):
+
+    def __init__(self):
+        Thing.__init__(self)
+        self.sharedoutput = []
+        self.history = []
+
+
+    def getView(self, viewer):
+        vbox = window.VBox()
+        c = LastLinesViewer()
+        self.sharedoutput.append(c)
+        self.displayLine(viewer.getName() + ' joined')
+        inputline = window.TextInput(40, self.makeListener(vbox,
+                                                         viewer))
+        vbox.addChild(c)
+        vbox.addChild(inputline)
+        return vbox
+    
+    
+    def displayLine(self, line):
+        self.history.append(line)
+        if len(self.history) > 10000:
+            self.history = self.history[-10000:]
+        for v in self.sharedoutput:
+            v.setLines(self.history)
+            v.repaint()
+
+
+    def makeListener(self, vbox, viewer):
+        def f(msg):
+            if str(msg).strip() == 'q':
+                viewer.lookAt(viewer.location)
+                self.displayLine(viewer.getName() + ' has left')
+            else:
+                log.msg(msg)
+                text = '<' + viewer.getName() + '> ' + msg
+                inputline = vbox.children[1]
+                inputline.setText('')
+                self.displayLine(text)
+        return f
+
+
 class DisputationArena(Thing):
 
     getproblem = lambda *a:defer.succeed(('''1+1 = ?''', 2))
@@ -612,6 +687,7 @@ hr = Room('Human Resource')
 furnace = Room('Furnace Room')
 maze = Room('Maze')
 tt = Room('Arenas')
+irc = Room('Talk to a representative')
 
 firepit = Thing()
 firepit.name = 'fire pit'
@@ -623,8 +699,13 @@ r.name = 'Turning back times tables arena'
 r2 = DisputationArena(nameThatAnimal)
 r2.name = 'Name that Animal arena'
 
+chatty = Chat()
+chat2 = Chat()
+chat2.name = 'other chat room'
+
 lobby.addThing(Exit(hr))
 lobby.addThing(Exit(tt))
+lobby.addThing(Exit(irc))
 
 hr.addThing(Exit(lobby))
 hr.addThing(Exit(furnace))
@@ -638,6 +719,10 @@ maze.addThing(Exit(maze))
 tt.addThing(Exit(lobby))
 tt.addThing(r)
 tt.addThing(r2)
+
+irc.addThing(Exit(lobby))
+irc.addThing(chatty)
+irc.addThing(chat2)
 
 
 
