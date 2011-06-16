@@ -1,4 +1,4 @@
-from twisted.internet import reactor, defer, task
+from twisted.internet import reactor, defer, task, stdio
 from twisted.internet.protocol import Factory
 from twisted.conch.telnet import TelnetTransport, TelnetBootstrapProtocol
 from twisted.conch.insults import insults, window
@@ -6,10 +6,21 @@ from twisted.conch.insults.text import flatten, attributes as A
 from twisted.conch.insults.helper import CharacterAttribute
 from twisted.python import text as tptext
 from twisted.internet.protocol import ProcessProtocol
-import random
+import random, sys, termios, tty, os
+from twisted.python.usage import Options, UsageError
 
 
-
+def runWithProtocol(klass):
+    fd = sys.__stdin__.fileno()
+    oldSettings = termios.tcgetattr(fd)
+    tty.setraw(fd)
+    try:
+        p = insults.ServerProtocol(klass)
+        stdio.StandardIO(p)
+        reactor.run()
+    finally:
+        termios.tcsetattr(fd, termios.TCSANOW, oldSettings)
+        os.write(fd, "\r\x1bc\r")
 
 
 def bootStrap(protocol):
@@ -724,13 +735,30 @@ irc.addThing(Exit(lobby))
 irc.addThing(chatty)
 irc.addThing(chat2)
 
+class MainOptions(Options):
+    def getSynopsis(self):
+        return """%s [options] """ % __file__
+
+    optFlags = [('foreground', 'f', 'Run in the foreground')]
+
+
+
+def main(argv):
+    opt = MainOptions()
+    try:
+        opt.parseOptions(argv[1:])
+    except UsageError, e:
+        raise SystemExit(str(e))
+    if opt['foreground']:
+        runWithProtocol(CampProtocol)
+    else:
+        from twisted.python import log
+        log.startLogging(sys.stdout)
+        f = Factory()
+        f.protocol = bootStrap(CampProtocol)
+        reactor.listenTCP(9099, f)
+        reactor.run()
 
 
 if __name__ == '__main__':
-    import sys
-    from twisted.python import log
-    log.startLogging(sys.stdout)
-    f = Factory()
-    f.protocol = bootStrap(CampProtocol)
-    reactor.listenTCP(9099, f)
-    reactor.run()
+    main(sys.argv)
