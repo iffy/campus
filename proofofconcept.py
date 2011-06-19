@@ -8,6 +8,7 @@ from twisted.python import text as tptext
 from twisted.internet.protocol import ProcessProtocol
 import random, sys, termios, tty, os
 from twisted.python.usage import Options, UsageError
+from twisted.python import log
 
 
 def runWithProtocol(klass):
@@ -33,6 +34,100 @@ def bootStrap(protocol):
             protocol)
     return f
 
+def ndigitrandom(digits=2, num=2):
+    r = random.Random()
+    h = (10 ** digits) -1
+    l = 10 ** (digits-1)
+    res = []
+    for i in xrange(num):
+        res.append(r.randint(l, h))
+    if len(res) == 1:
+        return res[0]
+    return res
+
+def boxyproblem(a, b, operation='*'):
+    p = '''\
+%19d
+%19d  %s
+--------
+''' % (a, b, operation)
+    s = eval(str(a) + ' ' + operation + ' ' + str(b))
+    return p, s
+
+
+def elevens(digits=2):
+    a = ndigitrandom(digits=digits, num=1)
+    b = 11
+    return boxyproblem(a, b)
+
+
+def addition(digits=2):
+    a, b = ndigitrandom(digits=digits)
+    return boxyproblem(a, b, '+')
+
+
+def subtraction(digits=2):
+    a, b = ndigitrandom(digits=digits)
+    if b > a:
+        return boxyproblem(b, a, '-')
+    return boxyproblem(a, b, '-')
+
+
+def complements(n=100):
+    a = ndigitrandom(digits=2, num=1)
+    p = 'x + %d = %d' % (a, n)
+    s = n - a
+    return p, s
+
+def mult2x1():
+    b = ndigitrandom(digits=2, num=1)
+    a = ndigitrandom(digits=1, num=1)
+    return boxyproblem(a, b)
+
+def mult3x1():
+    b = ndigitrandom(digits=3, num=1)
+    a = ndigitrandom(digits=1, num=1)
+    return boxyproblem(a, b)
+
+
+def mult2x2_same_sum10():
+    a = ndigitrandom(digits=2, num=1)
+    tens = (a/10) * 10
+    ones = a - tens
+    b = tens + ones
+    return boxyproblem(a, b)
+
+
+def squared(digits=2):
+    b = ndigitrandom(digits=2, num=1)
+    return '%d^2' % b, b**2
+
+
+def squared2x2_endswith_5():
+    r = random.Random()
+    a = r.choice(range(15, 95, 10))
+    return '%d^2' % a, a**2
+
+
+class Magic:
+    def __init__(self):
+        self.finished = set()
+        
+    def __call__(self):
+        return self.magic()
+        
+    def magic(self):
+        r = random.Random()
+        a = [elevens, addition, subtraction, complements, mult2x1,
+             mult3x1, mult2x2_same_sum10, squared, squared2x2_endswith_5]
+        m = r.choice(a)
+        res = m()
+        while res in self.finished:
+            log.msg('Already did that one')
+            res = m()
+        self.finished.add(res)
+        return res
+         
 
 def timestables():
     r = random.Random()
@@ -704,8 +799,9 @@ firepit = Thing()
 firepit.name = 'fire pit'
 firepit.description = 'This is a raging fire pit.  Don\'t touch it.'
 
-r = DisputationArena(timestables)
-r.name = 'Turning back times tables arena'
+magic = Magic()
+r = DisputationArena(magic)
+r.name = 'No paper no pencil no problem Math Arena (http://goo.gl/krdAE)'
 
 r2 = DisputationArena(nameThatAnimal)
 r2.name = 'Name that Animal arena'
@@ -752,7 +848,6 @@ def main(argv):
     if opt['foreground']:
         runWithProtocol(CampProtocol)
     else:
-        from twisted.python import log
         log.startLogging(sys.stdout)
         f = Factory()
         f.protocol = bootStrap(CampProtocol)
