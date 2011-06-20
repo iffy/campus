@@ -94,7 +94,8 @@ def mult2x2_same_sum10():
     a = ndigitrandom(digits=2, num=1)
     tens = (a/10) * 10
     ones = a - tens
-    b = tens + ones
+    c_ones = abs(10-ones)
+    b = tens + c_ones
     return boxyproblem(a, b)
 
 
@@ -120,6 +121,7 @@ class Magic:
         r = random.Random()
         a = [elevens, addition, subtraction, complements, mult2x1,
              mult3x1, mult2x2_same_sum10, squared, squared2x2_endswith_5]
+        a = [mult2x2_same_sum10]
         m = r.choice(a)
         res = m()
         while res in self.finished:
