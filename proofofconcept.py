@@ -8,6 +8,10 @@ from twisted.python import text as tptext
 from twisted.internet.protocol import ProcessProtocol
 import random
 
+from zope.interface import Interface, implements
+
+from axiom.store import Store
+from axiom import item, attributes
 
 
 
@@ -421,25 +425,126 @@ class Form(window.VBox):
         self.done.callback(self.values)
 
 
+#------------------------------------------------------------------------------
 
-class Thing:
+# copied straight from imaginary
+class Enhancement(object):
+    """
+    An L{Enhancement} is an object attached to a L{imaginary.objects.Thing}
+    that provides some additional functionality.
 
-    location = None
-    name = None
-    description = None
+    This class is a mixin; it expects to be mixed in to an L{Item} subclass,
+    since it passes itself as an argument to L{Item.powerUp}.
+
+    Note that an L{Enhancement} embodies the behavior, but not the physical
+    attributes, of the object in question.
+
+    For example, let's say you wanted to implement a cell phone in Imaginary.
+    You would make an L{Enhancement} called C{CellPhone} which had various
+    attributes, for example C{phoneNumber}.  Then you would do C{phoneBody =
+    Thing(...)} to create a physical 'phone' object in a world.  Next, you
+    would do C{cellPhone = CellPhone.createFor(phoneBody, ...)}, which would
+    create a C{CellPhone} object that endowed your physical 'phone' with the
+    properties of being an actual phone, like having a phone number, ringing
+    when dialed, etc.
+
+    Note that it is not enough to simply create your C{CellPhone}, as it will
+    not have a physical body, and therefore not exist in the world.
+
+    @ivar thing: a L{imaginary.objects.Thing} powered up with this
+         L{Enhancement}.  All subclasses which mix in L{Item} should declare
+         this as an L{attributes.reference} attribute.  Unless your
+         L{Enhancement} subclass is specifically designed to exist
+         independently of its L{Thing}, or to accept other types for this
+         attribute, it should also be declared as C{(allowNone=False,
+         reftype=Thing, whenDeleted=CASCADE)}.
+    """
+
+    def installed(self):
+        """
+        Override the C{installed()} hook that C{axiom.dependency} provides.
+        When L{Enhancement} was called C{ThingMixin}, the suggested mechanism
+        to install simulation components was to use the dependency system,
+        which was wrong, c.f. U{http://divmod.org/trac/ticket/2558}.
+
+        @raise RuntimeError: to indicate that you shouldn't use this
+            functionality.
+        """
+        raise RuntimeError("Use Enhancement.createFor, not installOn(), "
+                           "to apply an Enhancement to a Thing.")
+
+
+    def applyEnhancement(self):
+        """
+        Apply this L{Enhancement} to its C{thing} attribute, by powering it up.
+        """
+        self.thing.powerUp(self)
+
+
+    def removeEnhancement(self):
+        """
+        Remove this L{Enhancement} from its C{thing} attribute, by powering it
+        down.
+        """
+        self.thing.powerDown(self)
+
+
+    @classmethod
+    def createFor(cls, thing, **kw):
+        """
+        Create an L{Enhancement} of this type for the given
+        L{imaginary.objects.Thing}, in the given L{imaginary.objects.Thing}'s
+        store.
+        """
+        self = cls(store=thing.store, thing=thing, **kw)
+        self.applyEnhancement()
+        return self
+
+
+    @classmethod
+    def destroyFor(cls, thing):
+        """
+        Destroy the L{Enhancement}s of the given subclass associated with the
+        given L{Thing}, if one exists.
+
+        @param thing: A L{Thing} which may be the value of the C{thing}
+            attribute of an instance of the given L{Enhancement} subclass.
+
+        @type thing: L{Thing}
+        """
+        it = thing.store.findUnique(cls, cls.thing == thing, default=None)
+        if it is not None:
+            it.removeEnhancement()
+            it.deleteFromStore()
+
+
+class IContainer(Interface):
+    
+    pass
+
+
+
+class Thing(item.Item):
+
+    location = attributes.reference()
+    name = attributes.text()
+    description = attributes.text()
 
 
     def __init__(self):
         self.views = []
 
 
-    def moveTo(self, location):
+    def moveTo(self, where):
+        if where == self.location:
+            return
+        
         oldLocation = self.location
+        if where:
+            where = IContainer(where)
+            where.add(self)
         if oldLocation:
-            oldLocation.removeThing(self)
-        location.addThing(self)
-        assert self.location == location
-
+            oldLocation.remove(self)
 
     def getView(self, user):
         def okFunc():
@@ -480,31 +585,28 @@ class Thing:
 
 
 
-class Room(Thing):
-
-    def __init__(self, name=None):
-        Thing.__init__(self)
-        self.contents = []
-        self.name = name
-
-
-    def moveTo(self, location):
-        pass
-
-
-    def addThing(self, thing):
-        if thing not in self.contents:
-            self.contents.append(thing)
-            for view in self.views:
-                view.addOption(thing)
-        thing.location = self
+class Containment(object):
+    """
+    Copied from imaginary until I understand what's going on.
+    """
+    
+    implements(IContainer)
+    
+    def getContents(self):
+        if self.thing is None:
+            return []
+        # get all things whose location is my thing -- got it.
+        return self.store.query(Thing, Thing.location == self.thing)
 
 
-    def removeThing(self, thing):
-        if thing in self.contents:
-            self.contents.remove(thing)
-            for view in self.views:
-                view.remOption(thing)
+    def add(self, obj):
+        assert self.thing is not None
+        obj.location = self.thing
+
+
+    def remove(self, obj):
+        if obj.location is self.thing:
+            obj.location = None
 
 
     def getView(self, viewer):
@@ -514,138 +616,144 @@ class Room(Thing):
         return m
 
 
+class Container(item.Item, Containment, Enhancement):
 
-class Exit(Thing):
-
-    def __init__(self, destination):
-        Thing.__init__(self)
-        self.destination = destination
-
-
-    def getName(self):
-        return self.destination.getName()
+    thing = attributes.reference()
 
 
 
-class Chat(Thing):
+class Exit(item.Item):
 
-    def __init__(self):
-        Thing.__init__(self)
-        self.sharedoutput = []
-        self.history = []
-
-
-    def getView(self, viewer):
-        vbox = window.VBox()
-        c = LastLinesViewer()
-        self.sharedoutput.append(c)
-        self.displayLine(viewer.getName() + ' joined')
-        inputline = window.TextInput(40, self.makeListener(vbox,
-                                                         viewer))
-        vbox.addChild(c)
-        vbox.addChild(inputline)
-        return vbox
+    location = attributes.reference()
     
+    toLocation = attributes.reference()
     
-    def displayLine(self, line):
-        self.history.append(line)
-        if len(self.history) > 10000:
-            self.history = self.history[-10000:]
-        for v in self.sharedoutput:
-            v.setLines(self.history)
-            v.repaint()
-
-
-    def makeListener(self, vbox, viewer):
-        def f(msg):
-            if str(msg).strip() == 'q':
-                viewer.lookAt(viewer.location)
-                self.displayLine(viewer.getName() + ' has left')
-            else:
-                log.msg(msg)
-                text = '<' + viewer.getName() + '> ' + msg
-                inputline = vbox.children[1]
-                inputline.setText('')
-                self.displayLine(text)
-        return f
-
-
-class DisputationArena(Thing):
-
-    getproblem = lambda *a:defer.succeed(('''1+1 = ?''', 2))
-    question = None
-    answer = None
-    accepting_answers = False
-    name = 'Resolve Dispute'
-
-    def __init__(self, getproblem=None):
-        Thing.__init__(self)
-        if getproblem is not None:
-            self.getproblem = getproblem
-        self.getNewProblem()
-
-    def getView(self, viewer):
-        v = window.VBox()
-        c = ClearingTextOutputArea()
-        field = window.TextInput(30, self.makeListener(v, viewer))
-        v.addChild(c)
-        v.addChild(field)
-        
-        if self.question:
-            c.setText(self.question)
-        
-        v.changeFocus()
-        v.discard = self.getDiscard(v)
-        self.views.append(v)
-        return v
-
-    def makeListener(self, view, viewer):
-        def f(msg):
-            self.gotAnswer(view, viewer, msg)
-        return f
-
-    def getNewProblem(self):
-        d = defer.maybeDeferred(self.getproblem)
-        d.addCallback(self.gotProblem)
-
-
-    def gotProblem(self, problem):
-        self.question = problem[0]
-        self.answer = problem[1]
-        for view in self.views:
-            view.children[0].setText(self.question)
-            view.children[1].setText('')
-        self.accepting_answers = True
-
-    def gotAnswer(self, view, user, answer):
-        if str(answer).strip() == 'q':
-            user.lookAt(user.location)
-        elif str(answer).strip() == str(self.answer).strip():
-            if not self.accepting_answers:
-                return
-            self.accepting_answers = False
-            points = len(self.views) - 1
-            for v in self.views:
-                if v is view:
-                    v.children[0].setText(self.question + '\nCORRECT: %s points' % points)
-                    user.points += points
-                else:
-                    v.children[0].setText(self.question + '\nToo slow! %s got it first' % user.getName())
-            reactor.callLater(2, self.getNewProblem)
+    name = attributes.text()
 
 
 
+#class Chat(Thing):
+#    typeName = 'chat'
+#    schemaVersion = 1
+#
+#
+#    def __init__(self):
+#        Thing.__init__(self)
+#        self.sharedoutput = []
+#        self.history = []
+#
+#
+#    def getView(self, viewer):
+#        vbox = window.VBox()
+#        c = LastLinesViewer()
+#        self.sharedoutput.append(c)
+#        self.displayLine(viewer.getName() + ' joined')
+#        inputline = window.TextInput(40, self.makeListener(vbox,
+#                                                         viewer))
+#        vbox.addChild(c)
+#        vbox.addChild(inputline)
+#        return vbox
+#    
+#    
+#    def displayLine(self, line):
+#        self.history.append(line)
+#        if len(self.history) > 10000:
+#            self.history = self.history[-10000:]
+#        for v in self.sharedoutput:
+#            v.setLines(self.history)
+#            v.repaint()
+#
+#
+#    def makeListener(self, vbox, viewer):
+#        def f(msg):
+#            if str(msg).strip() == 'q':
+#                viewer.lookAt(viewer.location)
+#                self.displayLine(viewer.getName() + ' has left')
+#            else:
+#                log.msg(msg)
+#                text = '<' + viewer.getName() + '> ' + msg
+#                inputline = vbox.children[1]
+#                inputline.setText('')
+#                self.displayLine(text)
+#        return f
+#
+#
+#class DisputationArena(Thing):
+#    typeName = 'disputationarena'
+#    schemaVersion = 1
+#
+#
+#    getproblem = lambda *a:defer.succeed(('''1+1 = ?''', 2))
+#    question = attributes.text()
+#    answer = attributes.text()
+#    accepting_answers = attributes.boolean()
+#
+#    def __init__(self, getproblem=None):
+#        Thing.__init__(self)
+#        if getproblem is not None:
+#            self.getproblem = getproblem
+#        self.getNewProblem()
+#
+#    def getView(self, viewer):
+#        v = window.VBox()
+#        c = ClearingTextOutputArea()
+#        field = window.TextInput(30, self.makeListener(v, viewer))
+#        v.addChild(c)
+#        v.addChild(field)
+#        
+#        if self.question:
+#            c.setText(self.question)
+#        
+#        v.changeFocus()
+#        v.discard = self.getDiscard(v)
+#        self.views.append(v)
+#        return v
+#
+#    def makeListener(self, view, viewer):
+#        def f(msg):
+#            self.gotAnswer(view, viewer, msg)
+#        return f
+#
+#    def getNewProblem(self):
+#        d = defer.maybeDeferred(self.getproblem)
+#        d.addCallback(self.gotProblem)
+#
+#
+#    def gotProblem(self, problem):
+#        self.question = problem[0]
+#        self.answer = problem[1]
+#        for view in self.views:
+#            view.children[0].setText(self.question)
+#            view.children[1].setText('')
+#        self.accepting_answers = True
+#
+#    def gotAnswer(self, view, user, answer):
+#        if str(answer).strip() == 'q':
+#            user.lookAt(user.location)
+#        elif str(answer).strip() == str(self.answer).strip():
+#            if not self.accepting_answers:
+#                return
+#            self.accepting_answers = False
+#            points = len(self.views) - 1
+#            for v in self.views:
+#                if v is view:
+#                    v.children[0].setText(self.question + '\nCORRECT: %s points' % points)
+#                    user.points += points
+#                else:
+#                    v.children[0].setText(self.question + '\nToo slow! %s got it first' % user.getName())
+#            reactor.callLater(2, self.getNewProblem)
 
 
-class User(Thing):
+
+
+
+class Actor(item.Item):
+
+    thing = attributes.reference()
+
+    points = attributes.integer()
 
     protocol = None
-    points = 0
-
-    def moveTo(self, location):
-        Thing.moveTo(self, location)
-        self.protocol.window.status_bar.setLocation(self.location)
-        self.lookAt(self.location)
 
 
     def lookAt(self, thing):
@@ -662,7 +770,7 @@ class User(Thing):
     
     
     def getDescription(self):
-        return Thing.getDescription(self) + '\n%d points' % self.points
+        return self.thing.getDescription(self) + '\n%d points' % self.points
 
 
     def getView(self, user):
@@ -681,6 +789,8 @@ class User(Thing):
         return f
 
 
+
+store = Store('somefile.db')
 
 lobby = Room('The Lobby')
 hr = Room('Human Resource')
