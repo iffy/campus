@@ -22,7 +22,6 @@ Activate(robot)
 
 
 
-
 1. get user (from Store)
 2. get avatar (from user)
 3. insert avatar into World if not there yet
@@ -32,6 +31,12 @@ Activate(robot)
 cli port
 web port
 insults port
+
+Authentication
+----------------
+ssh * - prior
+web cli - prior
+telnet cli - cli handles auth (for testing/debugging)
 
 
 ./startserver --web-port 1234 --telnet-cli 9087 --ssh-insults 1982 thestore.db
