@@ -1,0 +1,42 @@
+Event
+Action
+
+User
+    Avatar1
+    Avatar2
+    Permissions
+
+user = User(name='bob')
+KeyChain(user)
+
+avatar1 = Thing(name='bob1')
+UserAvatar(avatar1, user)
+# give IKeyChain and IActor to avatar1
+
+
+robot = Thing(name='robot')
+KeyChain(robot)
+# gives IKeyChain to robot
+Activate(robot)
+# gives IActor to robot
+
+
+
+1. get user (from Store)
+2. get avatar (from user)
+3. insert avatar into World if not there yet
+4. attach ui to avatar
+
+
+cli port
+web port
+insults port
+
+Authentication
+----------------
+ssh * - prior
+web cli - prior
+telnet cli - cli handles auth (for testing/debugging)
+
+
+./startserver --web-port 1234 --telnet-cli 9087 --ssh-insults 1982 thestore.db
