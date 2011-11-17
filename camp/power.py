@@ -4,7 +4,7 @@ from axiom.item import Item
 from axiom import attributes
 
 from camp.thing import Thing
-from camp.interface import IContainer, IUseable
+from camp.interface import IContainer, IUseable, IActor
 
 
 
@@ -64,3 +64,29 @@ class Portal(Item):
             who.location = self.destination
         except:
             raise Exception('No destination')
+
+
+
+class UserActor(Item):
+    """
+    I am the ability to act as a user.
+    """
+    
+    implements(IActor)
+    powerupInterfaces = (IActor,)
+
+    thing = attributes.reference()
+    user = attributes.reference()
+
+    
+    def __init__(self, thing, user, *args, **kwargs):
+        Item.__init__(self, *args, **kwargs)
+        self.thing = thing
+        self.user = user
+        self.store = thing.store
+        self.thing.powerUp(self)
+
+
+
+
+

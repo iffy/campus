@@ -28,3 +28,12 @@ class IUseable(Interface):
         """
         Use the thing.
         """
+
+
+class IActor(Interface):
+    """
+    For things that can act.
+    """
+
+
+

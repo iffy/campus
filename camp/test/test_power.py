@@ -4,9 +4,9 @@ from zope.interface.verify import verifyClass
 
 from axiom.store import Store
 
-from camp.interface import IContainer, IUseable
-from camp.power import Containment, Portal
-from camp.thing import Thing
+from camp.interface import IContainer, IUseable, IActor
+from camp.power import Containment, Portal, UserActor
+from camp.thing import Thing, User
 
 
 
@@ -98,6 +98,31 @@ class PortalTest(TestCase):
         Containment(p.destination)
         p.use(guy)
         self.assertEqual(guy.location, p.destination)
+
+
+
+class UserActorTest(TestCase):
+
+
+    def setUp(self):
+        self.store = Store()
+
+
+    def test_IActor(self):
+        verifyClass(IActor, UserActor)
+
+
+    def test_init(self):
+        """
+        You initialize with a user.
+        """
+        t = Thing(store=self.store)
+        u = User(store=self.store)
+        a = UserActor(t, u)
+        self.assertEqual(a.thing, t)
+        self.assertEqual(a.user, u)
+        self.assertEqual(a.store, self.store)
+        self.assertEqual(IActor(t), a)
 
 
 

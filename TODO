@@ -1,6 +1,44 @@
 Event
 Action
 
-commandline
-web
-insults
+User
+    Avatar1
+    Avatar2
+    Permissions
+
+user = User(name='bob')
+KeyChain(user)
+
+avatar1 = Thing(name='bob1')
+UserAvatar(avatar1, user)
+# give IKeyChain and IActor to avatar1
+
+
+robot = Thing(name='robot')
+KeyChain(robot)
+# gives IKeyChain to robot
+Activate(robot)
+# gives IActor to robot
+
+
+
+world = World()
+# check username and password
+user = ...
+# logged in elsewhere?
+user.avatars
+# yes:
+#   take over avatar
+#   create parallel avatar w/ shared Permission
+# no: create avatar
+actor = world.puppetFor('frodo') # ; returns Thing with IActor
+world.inhabit('Frodo
+
+Store
+
+cli port
+web port
+insults port
+
+
+./startserver --web-port 1234 --telnet-cli 9087 --ssh-insults 1982 thestore.db
