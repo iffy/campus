@@ -28,9 +28,23 @@ class User(Item):
 
     def createAvatar(self):
         """
-        XXX
+        Create a L{Thing} to be used as an avatar for me.
         """
         from camp.power import UserActor
-        avatar = Thing(store=self.store, name=self.name)
+        avatar = Thing(store=self.store, name=self.name, owner=self)
         UserActor(avatar, self)
         return avatar
+
+
+    def avatars(self):
+        """
+        Get a list of current avatar L{Thing}s representing me.
+        """
+        from camp.power import UserActor
+        for ua in self.store.query(UserActor, UserActor.user == self):
+            if ua.thing:
+                yield ua.thing
+            else:
+                ua.deleteFromStore()
+
+
