@@ -22,19 +22,12 @@ Activate(robot)
 
 
 
-world = World()
-# check username and password
-user = ...
-# logged in elsewhere?
-user.avatars
-# yes:
-#   take over avatar
-#   create parallel avatar w/ shared Permission
-# no: create avatar
-actor = world.puppetFor('frodo') # ; returns Thing with IActor
-world.inhabit('Frodo
 
-Store
+1. get user (from Store)
+2. get avatar (from user)
+3. insert avatar into World if not there yet
+4. attach ui to avatar
+
 
 cli port
 web port
