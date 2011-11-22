@@ -56,11 +56,31 @@ class LineProtocolTest(TestCase):
         """
         p = LineProtocol()
         t = StringTransport()
-        p.transport = t
+        
+        p.makeConnection(t)
+        self.assertEqual(t.value(), "username: ")
+        t.clear()
         
         r = p.proto_username('foo')
         self.assertEqual(p.username, 'foo')
         self.assertEqual(r, 'password')
+        self.assertEqual(t.value(), "password: ")
+        self.assertEqual(p.line_mode, 0, "Should set to raw mode")
+
+
+    def test_password(self):
+        """
+        should get the password, then wait for the user
+        """
+        p = LineProtocol()
+        t = StringTransport()
+        p.transport = t
+        p.setRawMode()
+        
+        r = p.proto_password('hello')
+        self.assertEqual(p.line_mode, 1, "Should go back to line mode")
+        
+        
         
 
 
